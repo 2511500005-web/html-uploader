@@ -1,34 +1,239 @@
-<!DOCTYPE html><html lang="id">
+<!DOCTYPE html><html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Upload & Preview HTML</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <title>Simple Match-3 (Stable)</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    h1 { font-size: 20px; }
-    iframe { width: 100%; height: 70vh; border: 1px solid #ccc; margin-top: 10px; }
-    input { margin-top: 10px; }
-    .note { margin-top: 15px; font-size: 14px; color: #555; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #222;
+      color: #fff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    #container {
+      text-align: center;
+    }
+    canvas {
+      background: #111;
+      border-radius: 12px;
+      touch-action: manipulation;
+    }
+    #score {
+      margin-bottom: 10px;
+      font-size: 18px;
+    }
   </style>
 </head>
 <body>
-  <h1>Upload & Preview File HTML</h1>
-  <input type="file" accept=".html,.htm" id="fileInput">  <iframe id="preview"></iframe>  <div class="note">
-    File HTML hanya diproses di browser (tanpa server). 
-    Jika web ini di‑hosting (GitHub Pages / Netlify), orang lain bisa membuka halaman ini dan mengupload file HTML mereka sendiri.
-  </div>  <script>
-    const input = document.getElementById('fileInput');
-    const iframe = document.getElementById('preview');
+<div id="container">
+  <div id="score">Score: 0</div>
+  <canvas id="game" width="360" height="360"></canvas>
+</div><script>
+/* ===== CONFIG ===== */
+const COLS = 6;
+const ROWS = 6;
+const SIZE = 60;
+const COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f1c40f', '#9b59b6'];
 
-    input.addEventListener('change', () => {
-      const file = input.files[0];
-      if (!file) return;
+/* ===== STATE ===== */
+let board = [];
+let selected = null;
+let score = 0;
+let animating = false;
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        iframe.srcdoc = reader.result;
-      };
-      reader.readAsText(file);
-    });
-  </script></body>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+
+/* ===== UTIL ===== */
+const randColor = () => COLORS[Math.floor(Math.random() * COLORS.length)];
+const inBounds = (x, y) => x >= 0 && x < COLS && y >= 0 && y < ROWS;
+
+/* ===== INIT ===== */
+function initBoard() {
+  board = [];
+  for (let y = 0; y < ROWS; y++) {
+    board[y] = [];
+    for (let x = 0; x < COLS; x++) {
+      let c;
+      do {
+        c = randColor();
+      } while (
+        (x >= 2 && board[y][x-1] === c && board[y][x-2] === c) ||
+        (y >= 2 && board[y-1][x] === c && board[y-2][x] === c)
+      );
+      board[y][x] = c;
+    }
+  }
+}
+
+/* ===== DRAW ===== */
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const px = x * SIZE;
+      const py = y * SIZE;
+
+      ctx.fillStyle = board[y][x];
+      ctx.beginPath();
+      ctx.roundRect(px + 6, py + 6, SIZE - 12, SIZE - 12, 12);
+      ctx.fill();
+
+      if (selected && selected.x === x && selected.y === y) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(px + 4, py + 4, SIZE - 8, SIZE - 8);
+      }
+    }
+  }
+}
+
+/* ===== INPUT ===== */
+canvas.addEventListener('pointerdown', e => {
+  if (animating) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.floor((e.clientX - rect.left) / SIZE);
+  const y = Math.floor((e.clientY - rect.top) / SIZE);
+
+  if (!inBounds(x, y)) return;
+
+  if (!selected) {
+    selected = { x, y };
+  } else {
+    const dx = Math.abs(selected.x - x);
+    const dy = Math.abs(selected.y - y);
+
+    if (dx + dy === 1) {
+      swap(selected, { x, y });
+      if (!checkMatches()) {
+        swap(selected, { x, y });
+      } else {
+        processMatches();
+      }
+    }
+    selected = null;
+  }
+
+  draw();
+});
+
+/* ===== GAME LOGIC ===== */
+function swap(a, b) {
+  const t = board[a.y][a.x];
+  board[a.y][a.x] = board[b.y][b.x];
+  board[b.y][b.x] = t;
+}
+
+function checkMatches() {
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS - 2; x++) {
+      const c = board[y][x];
+      if (c && c === board[y][x+1] && c === board[y][x+2]) return true;
+    }
+  }
+  for (let x = 0; x < COLS; x++) {
+    for (let y = 0; y < ROWS - 2; y++) {
+      const c = board[y][x];
+      if (c && c === board[y+1][x] && c === board[y+2][x]) return true;
+    }
+  }
+  return false;
+}
+
+function findMatches() {
+  const matches = [];
+
+  // horizontal
+  for (let y = 0; y < ROWS; y++) {
+    let count = 1;
+    for (let x = 1; x <= COLS; x++) {
+      if (x < COLS && board[y][x] === board[y][x-1]) {
+        count++;
+      } else {
+        if (count >= 3) {
+          for (let i = 0; i < count; i++) {
+            matches.push({ x: x-1-i, y });
+          }
+        }
+        count = 1;
+      }
+    }
+  }
+
+  // vertical
+  for (let x = 0; x < COLS; x++) {
+    let count = 1;
+    for (let y = 1; y <= ROWS; y++) {
+      if (y < ROWS && board[y][x] === board[y-1][x]) {
+        count++;
+      } else {
+        if (count >= 3) {
+          for (let i = 0; i < count; i++) {
+            matches.push({ x, y: y-1-i });
+          }
+        }
+        count = 1;
+      }
+    }
+  }
+
+  return matches;
+}
+
+function processMatches() {
+  animating = true;
+  const matches = findMatches();
+  if (matches.length === 0) {
+    animating = false;
+    return;
+  }
+
+  score += matches.length * 10;
+  scoreEl.textContent = 'Score: ' + score;
+
+  matches.forEach(m => board[m.y][m.x] = null);
+  draw();
+
+  setTimeout(() => {
+    dropTiles();
+    fillTiles();
+    draw();
+    setTimeout(() => {
+      processMatches();
+    }, 150);
+  }, 150);
+}
+
+function dropTiles() {
+  for (let x = 0; x < COLS; x++) {
+    let pointer = ROWS - 1;
+    for (let y = ROWS - 1; y >= 0; y--) {
+      if (board[y][x]) {
+        board[pointer][x] = board[y][x];
+        if (pointer !== y) board[y][x] = null;
+        pointer--;
+      }
+    }
+  }
+}
+
+function fillTiles() {
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      if (!board[y][x]) board[y][x] = randColor();
+    }
+  }
+  animating = false;
+}
+
+/* ===== START ===== */
+initBoard();
+draw();
+</script></body>
 </html>
