@@ -1,0 +1,34 @@
+<!DOCTYPE html><html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Upload & Preview HTML</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { font-size: 20px; }
+    iframe { width: 100%; height: 70vh; border: 1px solid #ccc; margin-top: 10px; }
+    input { margin-top: 10px; }
+    .note { margin-top: 15px; font-size: 14px; color: #555; }
+  </style>
+</head>
+<body>
+  <h1>Upload & Preview File HTML</h1>
+  <input type="file" accept=".html,.htm" id="fileInput">  <iframe id="preview"></iframe>  <div class="note">
+    File HTML hanya diproses di browser (tanpa server). 
+    Jika web ini di‑hosting (GitHub Pages / Netlify), orang lain bisa membuka halaman ini dan mengupload file HTML mereka sendiri.
+  </div>  <script>
+    const input = document.getElementById('fileInput');
+    const iframe = document.getElementById('preview');
+
+    input.addEventListener('change', () => {
+      const file = input.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        iframe.srcdoc = reader.result;
+      };
+      reader.readAsText(file);
+    });
+  </script></body>
+</html>
